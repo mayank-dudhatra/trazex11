@@ -1,0 +1,27 @@
+.layout-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #000;
+}
+
+.layout-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* Prevents overlap with fixed Navbar and Footer */
+}
+
+/* Ensure Navbar and Footer are properly positioned */
+.layout-container > nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.layout-container > footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+}

@@ -1,10 +1,13 @@
-import React, {useEffect, useState} from "react";
+import React from "react";
 import { motion } from "framer-motion";
 
-const Loader = () => {
+const Loader = ({ fullScreen = true, className = "" }) => {
   return (
-    <>
-    <div className="flex items-center justify-center h-screen ">
+    <div
+      className={`flex items-center justify-center ${
+        fullScreen ? "h-screen" : "h-32"
+      } ${className}`}
+    >
       <motion.div
         className="relative w-16 h-16"
         initial={{ scale: 0 }}
@@ -34,8 +37,6 @@ const Loader = () => {
         ))}
       </motion.div>
     </div>
-
-    </>
   );
 };
 

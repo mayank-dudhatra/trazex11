@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
+import apiClient from '../../services/apiClient';
+import Loader from '../Loader/Loader';
 import './Login.css';
 
 function Login() {
@@ -8,6 +9,8 @@ function Login() {
     email: '',
     password: ''
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const navigate = useNavigate(); // Initialize useNavigate
 
@@ -17,22 +20,23 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSubmitting(true);
     try {
-      const res = await axios.post(
-        'https://trazex11-4.onrender.com/users/login', 
-        formData, 
-        { headers: { 'Content-Type': 'application/json' } } // ✅ Fix content-type
-      );
-  
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('userId', res.data.userId || ""); // Store user ID
-  
-      console.log("Stored User ID:", localStorage.getItem("userId"));
-  
+      const response = await apiClient.post('/auth/login', formData);
+      const userId = response?.data?.user?.id || response?.data?.user?._id || '';
+      if (userId) {
+        localStorage.setItem('userId', userId);
+      }
       navigate('/home');
     } catch (error) {
-      console.error("Login Error:", error.response?.data || error.message);
-      alert(error.response?.data?.error || "Login failed. Please try again.");
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Login failed. Please try again.';
+      setError(message);
+    } finally {
+      setSubmitting(false);
     }
   };
   
@@ -50,26 +54,31 @@ function Login() {
 
       {/* Right side login form */}
       <div className="login-form-container">
-        <div className="login-card">
+        <div className="login-card auth-card">
           <div className="logo-container">
             <img src="https://res.cloudinary.com/dbrb9ptmn/image/upload/v1738654508/oj7qqwdo1uimyam74bvh.png" alt="Trazex Logo" />
           </div>
 
           <h2 className="welcome-text">Welcome back!</h2>
+          <p className="auth-subtitle">Sign in to continue your trading journey.</p>
 
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="form-inputs">
+              <label className="auth-label" htmlFor="email">Email</label>
               <input
                 type="email"
                 name="email"
+                id="email"
                 placeholder="Email"
                 className="input-field"
                 onChange={handleChange}
                 required
               />
+              <label className="auth-label" htmlFor="password">Password</label>
               <input
                 type="password"
                 name="password"
+                id="password"
                 placeholder="Password"
                 className="input-field"
                 onChange={handleChange}
@@ -77,16 +86,27 @@ function Login() {
               />
             </div>
 
+            {error && <div className="auth-error">{error}</div>}
+
             <div className="button-container">
-              <button type="submit" className="login-button2">
-                Log-In
+              <button type="submit" className="login-button2" disabled={submitting}>
+                {submitting ? 'Signing in...' : 'Log-In'}
               </button>
             </div>
 
             <div className="forgot-password">
-              <a href="#">Forgot Password?</a>
+              <span>Forgot Password?</span>
+            </div>
+            <div className="auth-footer">
+              <span>New here?</span>
+              <Link to="/register">Create an account</Link>
             </div>
           </form>
+          {submitting && (
+            <div className="auth-overlay">
+              <Loader fullScreen={false} />
+            </div>
+          )}
         </div>
       </div>
     </div>
