@@ -2,23 +2,36 @@ import React, { useState, useEffect } from "react";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
 import Details from "./CardDetails";
+import apiClient from "../../services/apiClient";
+import { useMultipleStocks } from "../../hooks/useStockLive";
 
 const StockCard = () => {
   const [stocks, setStocks] = useState([]);
+  const [symbols, setSymbols] = useState([]);
   const [exchange, setExchange] = useState("NSE");
   const [showDetails, setShowDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const { stocks: liveStocks } = useMultipleStocks(symbols);
+
+  const normalizeStock = (stock) => ({
+    ...stock,
+    LTP: stock.LTP ?? stock.price ?? null,
+    percentchange: stock.percentchange ?? stock.percentChange ?? null
+  });
 
   // Fetch stock data from backend
   useEffect(() => {
     const fetchStocks = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`https://trazex11-4.onrender.com/api/stocks/${exchange}`); // Replace with your backend URL
-        if (!response.ok) throw new Error("Failed to fetch stock data");
-        const data = await response.json();
-        setStocks(data);
+        const response = await apiClient.get("/stocks", {
+          params: { exchange }
+        });
+        const list = response?.data?.data || [];
+        setStocks(list.map(normalizeStock));
+        setSymbols(list.map((stock) => stock.symbol));
         setLoading(false);
       } catch (err) {
         setError(err.message);
@@ -27,6 +40,20 @@ const StockCard = () => {
     };
     fetchStocks();
   }, [exchange]);
+
+  useEffect(() => {
+    if (!liveStocks || Object.keys(liveStocks).length === 0) {
+      return;
+    }
+
+    setStocks((prev) =>
+      prev.map((stock) => {
+        const live = liveStocks[stock.symbol];
+        if (!live) return stock;
+        return normalizeStock({ ...stock, ...live });
+      })
+    );
+  }, [liveStocks]);
 
   // Toggle details visibility for a specific stock
   const toggleDetails = (symbol) => {
@@ -40,6 +67,8 @@ const StockCard = () => {
   const handleExchangeChange = (selectedExchange) => {
     setExchange(selectedExchange);
     setShowDetails({});
+    setStocks([]);
+    setSymbols([]);
   };
 
   return (
@@ -88,6 +117,11 @@ const StockCard = () => {
         {!loading && !error && stocks.length > 0 && (
           <div className="w-[1130px] space-y-5">
             {stocks.map((stock) => (
+              (() => {
+                const cleanSymbol = stock.symbol?.split(".")[0] || "";
+                const imageUrl = `https://images.dhan.co/symbol/${cleanSymbol}.png`;
+
+                return (
               <div
                 key={stock.symbol}
                 className="bg-[#1E1E1E] p-4 pt-2 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300"
@@ -95,7 +129,7 @@ const StockCard = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
                     <img
-                      src={stock.image || "https://via.placeholder.com/50"}
+                      src={imageUrl}
                       className="w-[50px] h-[50px] mr-3 rounded-full"
                       alt={`${stock.name} Logo`}
                       onError={(e) => (e.target.src = "https://via.placeholder.com/50")}
@@ -176,6 +210,8 @@ const StockCard = () => {
 
                 {showDetails[stock.symbol] && <Details />}
               </div>
+                );
+              })()
             ))}
           </div>
         )}

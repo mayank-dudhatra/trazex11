@@ -6,7 +6,11 @@ import io from 'socket.io-client';
  * Handles real-time stock price updates via WebSocket
  */
 
-const SOCKET_SERVER_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001';
+const SOCKET_SERVER_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  (import.meta.env.VITE_API_BASE_URL
+    ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/?$/, '')
+    : 'http://localhost:3001');
 
 class StockSocketClient {
   constructor() {
@@ -14,6 +18,7 @@ class StockSocketClient {
     this.isConnected = false;
     this.subscriptions = new Set();
     this.listeners = new Map();
+    this._stockListenerAttached = false;
   }
 
   /**
@@ -71,7 +76,7 @@ class StockSocketClient {
       callback(data);
     });
 
-    this.socket.emit('subscribe:stocks');
+    this.socket.emit('request:stats');
   }
 
   /**
@@ -80,20 +85,15 @@ class StockSocketClient {
   onStockUpdate(symbol, callback) {
     if (!this.socket) return;
 
-    const eventName = `stock:${symbol}`;
-    
     // Store listener
     this.listeners.set(symbol, callback);
-    
+
     // Subscribe
     this.subscriptions.add(symbol);
-    this.socket.emit('subscribe:stock', symbol);
+    this.socket.emit('subscribe', symbol);
 
     // Listen for updates
-    this.socket.off(eventName); // Remove old listener
-    this.socket.on(eventName, (data) => {
-      callback(data);
-    });
+    this._ensureStockListener();
 
     console.log(`📊 Subscribed to ${symbol}`);
   }
@@ -106,7 +106,7 @@ class StockSocketClient {
 
     this.subscriptions.delete(symbol);
     this.listeners.delete(symbol);
-    this.socket.emit('unsubscribe:stock', symbol);
+    this.socket.emit('unsubscribe', symbol);
 
     console.log(`👋 Unsubscribed from ${symbol}`);
   }
@@ -131,13 +131,24 @@ class StockSocketClient {
    */
   _resubscribeToAll() {
     for (const symbol of this.subscriptions) {
-      this.socket.emit('subscribe:stock', symbol);
+      this.socket.emit('subscribe', symbol);
       console.log(`🔄 Resubscribed to ${symbol}`);
     }
+  }
 
-    if (this.subscriptions.has('ALL')) {
-      this.socket.emit('subscribe:stocks');
-    }
+  _ensureStockListener() {
+    if (!this.socket || this._stockListenerAttached) return;
+
+    this.socket.on('stockUpdate', (data) => {
+      const symbol = data?.symbol;
+      if (!symbol) return;
+      const handler = this.listeners.get(symbol);
+      if (handler) {
+        handler(data);
+      }
+    });
+
+    this._stockListenerAttached = true;
   }
 
   /**
@@ -147,6 +158,7 @@ class StockSocketClient {
     if (this.socket) {
       this.socket.disconnect();
       this.isConnected = false;
+      this._stockListenerAttached = false;
       console.log('❌ Socket disconnected');
     }
   }
