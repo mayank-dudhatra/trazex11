@@ -7,7 +7,8 @@ import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
 import { FaTimes } from "react-icons/fa";
-import axios from "axios";
+import apiClient from "../../services/apiClient";
+import { useMultipleStocks } from "../../hooks/useStockLive";
 
 
 const CreateTeamsPage = () => {
@@ -16,33 +17,57 @@ const CreateTeamsPage = () => {
   const [userId, setUserId] = useState(null);
   const [contestId, setContestId] = useState(null);
   const [stockList, setstockList] = useState([]);
+  const [symbols, setSymbols] = useState([]);
 
   const navigate = useNavigate();
   const maxStocks = 11;
+
+  const { stocks: liveStocks } = useMultipleStocks(symbols);
+
+  const normalizeStock = (stock) => ({
+    ...stock,
+    percentchange: stock.percentchange ?? stock.percentChange ?? 0
+  });
 
 
   useEffect(() => {
     const storedContestId = localStorage.getItem("contestId");
     if (storedContestId) setContestId(storedContestId);
-    console.log(storedContestId);
 
-    const storedExchange = localStorage.getItem("exchange"); // Get exchange type
- 
+    const storedExchange = localStorage.getItem("exchange");
 
-  const fetchStocks = async (exchange) => {
-    try {
-      const response = await axios.get(`https://trazex11-4.onrender.com/api/stocks/${exchange}`);
-      setstockList(response.data);
-    } catch (error) {
-      console.error("Error fetching stocks:", error);
+    const fetchStocks = async (exchange) => {
+      try {
+        const response = await apiClient.get("/stocks", {
+          params: { exchange }
+        });
+        const list = response?.data?.data || [];
+        const normalized = list.map(normalizeStock);
+        setstockList(normalized);
+        setSymbols(normalized.map((stock) => stock.symbol));
+      } catch (error) {
+        console.error("Error fetching stocks:", error);
+      }
+    };
+
+    if (storedExchange) {
+      fetchStocks(storedExchange);
     }
-  };
-
-  if (storedExchange) {
-    fetchStocks(storedExchange);  // Fetch stocks based on exchange
-  }
-
   }, []);
+
+  useEffect(() => {
+    if (!liveStocks || Object.keys(liveStocks).length === 0) {
+      return;
+    }
+
+    setstockList((prev) =>
+      prev.map((stock) => {
+        const live = liveStocks[stock.symbol];
+        if (!live) return stock;
+        return normalizeStock({ ...stock, ...live });
+      })
+    );
+  }, [liveStocks]);
 
 
 
@@ -104,17 +129,22 @@ const CreateTeamsPage = () => {
             <span>Sell: {selectedStocks.filter(stock => stock.type === "sell").length}</span>
           </div>
           <div className="flex flex-wrap gap-4">
-            {selectedStocks.map((stock, index) => (
+            {selectedStocks.map((stock, index) => {
+              const cleanSymbol = stock.symbol?.split(".")[0] || "";
+              const imageUrl = `https://images.dhan.co/symbol/${cleanSymbol}.png`;
+
+              return (
               <div 
                 key={index} 
                 className={`relative p-3 rounded-lg ${
                   stock.type === "buy" ? "border-2 border-green-500" : "border-2 border-red-500"
                 }`}
               >
-                <img src={stock.image} alt="Stock Logo" className="w-12 h-12 rounded-full" />
+                <img src={imageUrl} alt="Stock Logo" className="w-12 h-12 rounded-full" />
                 <FaTimes className="absolute top-0 right-0 cursor-pointer text-red-400 hover:text-red-600" onClick={() => handleRemove(index)} />
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -144,10 +174,13 @@ const CreateTeamsPage = () => {
 };
 
 const StockCard = ({ stock, handleBuy, handleSell }) => {
+  const cleanSymbol = stock.symbol?.split(".")[0] || "";
+  const imageUrl = `https://images.dhan.co/symbol/${cleanSymbol}.png`;
+
   return (
     <article className="flex items-center justify-between bg-zinc-800 p-4 rounded-lg text-white mt-4 w-[1100px] shadow-sm">
       <div className="flex items-center gap-4">
-        <img src={stock.image} alt="Stock Logo" className="w-12 h-12 rounded-full" />
+        <img src={imageUrl} alt="Stock Logo" className="w-12 h-12 rounded-full" />
         <div>
           <h3 className="text-lg font-bold">{stock.name}</h3>
           <p className="text-sm text-gray-400">{stock.sector}</p>
