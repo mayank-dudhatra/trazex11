@@ -291,7 +291,7 @@
 
 
 import { useEffect, useState } from "react";
-import axios from "axios";
+import apiClient from "../../services/apiClient";
 import { toast, ToastContainer } from "react-toastify"; // Import ToastContainer
 import "react-toastify/dist/ReactToastify.css"; // Import CSS for styling
 import { Link } from "react-router-dom";
@@ -305,14 +305,6 @@ const JoinContest = ({ setIsOpen }) => {
   const [viceCaptain, setViceCaptain] = useState(null);
   const [entryFee, setEntryFee] = useState(0);
 
-  // Function to format the date as "DD MMM"
-  const getFormattedDate = () => {
-    const today = new Date();
-    const day = today.getDate();
-    const month = today.toLocaleString("en-US", { month: "short" }).toUpperCase();
-    return `${day} ${month}`;
-  };
-
   useEffect(() => {
     const storedContestId = localStorage.getItem("contestId");
     setContestId(storedContestId);
@@ -321,21 +313,35 @@ const JoinContest = ({ setIsOpen }) => {
     setCaptain(JSON.parse(localStorage.getItem("captain")));
     setViceCaptain(JSON.parse(localStorage.getItem("viceCaptain")));
 
+    const storedEntryFee = Number(localStorage.getItem("contestEntryFee"));
+    if (!Number.isNaN(storedEntryFee) && storedEntryFee > 0) {
+      setEntryFee(storedEntryFee);
+      return;
+    }
+
     const fetchContestDetails = async () => {
       try {
-        const date = getFormattedDate();
+        const date = localStorage.getItem("contestDate");
         const exchange = localStorage.getItem("exchange") || "NSE";
+        if (!date) {
+          toast.error("Missing contest date. Please go back and try again.");
+          return;
+        }
         console.log("Fetching contest for:", { date, exchange, storedContestId });
 
-        const response = await axios.get(
-          `https://trazex11-4.onrender.com/api/contests/date/${date}/exchange/${exchange}`
-        );
+        const response = await apiClient.get("/contests", {
+          params: { date, market: exchange }
+        });
 
-        console.log(`Fetching contest for: Date=${date}, Exchange=${exchange}`);
-        console.log("API Response:", response.data);
+        const grouped = response?.data?.data || {};
+        const allContests = [
+          ...(grouped.daily || []),
+          ...(grouped.weekly || []),
+          ...(grouped.monthly || [])
+        ];
 
-        if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-          const matchingContest = response.data.find((contest) => contest._id === storedContestId);
+        if (allContests.length > 0) {
+          const matchingContest = allContests.find((contest) => contest._id === storedContestId);
           if (matchingContest) {
             console.log("Matching contest found:", matchingContest);
             setEntryFee(matchingContest.entryFee || 0);
@@ -345,7 +351,7 @@ const JoinContest = ({ setIsOpen }) => {
             setEntryFee(0);
           }
         } else {
-          console.warn("No contests found in response:", response.data);
+          console.warn("No contests found in response:", response?.data);
           toast.error(`No contests found for ${exchange} on ${date}.`);
         }
       } catch (error) {
@@ -390,7 +396,7 @@ const JoinContest = ({ setIsOpen }) => {
 
     try {
       console.log("Sending request to create team:", payload);
-      const response = await axios.post("https://trazex11-4.onrender.com/api/team/create-team", payload);
+      const response = await apiClient.post("/team/create-team", payload);
 
       const newTeamId = response.data.team?._id;
       if (!newTeamId) {
@@ -420,7 +426,7 @@ const JoinContest = ({ setIsOpen }) => {
     const joinPayload = { teamId, contestId, userId };
 
     try {
-      const response = await axios.post("https://trazex11-4.onrender.com/api/contests/join", joinPayload);
+      const response = await apiClient.post(`/contests/${contestId}/join`, joinPayload);
       toast.success("Successfully joined the contest!");
     } catch (error) {
       console.error("Error joining contest:", error.response ? error.response.data : error.message);

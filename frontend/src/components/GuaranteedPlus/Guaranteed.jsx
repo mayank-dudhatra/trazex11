@@ -38,9 +38,11 @@ const ContestDetails = () => {
 
   const navigate = useNavigate();
 
-  const handleGoToCreateTeams = (contestId) => {
-    localStorage.setItem("contestId", contestId);
+  const handleGoToCreateTeams = (contest) => {
+    localStorage.setItem("contestId", contest._id);
     localStorage.setItem("exchange", exchange);
+    localStorage.setItem("contestDate", date);
+    localStorage.setItem("contestEntryFee", String(contest.entryFee ?? 0));
     navigate("/createTeams");
   };
 
@@ -84,7 +86,7 @@ const ContestDetails = () => {
                   totalSpots={totalSpots} 
                   entryFee={contest.entryFee} 
                   prizepool={`${contest.prizePool} Coins`} 
-                  contestId={contest._id} 
+                  contest={contest} 
                   handleGoToCreateTeams={handleGoToCreateTeams}
                 />
                 <StatsSection 
@@ -105,7 +107,7 @@ const ContestDetails = () => {
   );
 };
 
-const GuaranteedPlusHeader = ({ icon, title, amount, spotsLeft, totalSpots, entryFee, contestId, handleGoToCreateTeams }) => (
+const GuaranteedPlusHeader = ({ icon, title, amount, spotsLeft, totalSpots, entryFee, contest, handleGoToCreateTeams }) => (
   <div className="flex flex-wrap gap-5 justify-between self-center w-full max-w-[1241px] max-md:max-w-full">
     <div className="flex flex-col self-start max-md:max-w-full">
       <div className="flex gap-5 self-start text-xl font-semibold text-white">
@@ -117,7 +119,7 @@ const GuaranteedPlusHeader = ({ icon, title, amount, spotsLeft, totalSpots, entr
       </div>
     </div>
     <ProgressBar spotsLeft={spotsLeft} totalSpots={totalSpots} />
-    <EntryFeeSection entryFee={entryFee} contestId={contestId} handleGoToCreateTeams={handleGoToCreateTeams} />  
+    <EntryFeeSection entryFee={entryFee} contest={contest} handleGoToCreateTeams={handleGoToCreateTeams} />  
   </div>
 );
 
@@ -137,7 +139,7 @@ const ProgressBar = ({ spotsLeft, totalSpots }) => {
   );
 };
 
-const EntryFeeSection = ({ entryFee, contestId, handleGoToCreateTeams }) => {
+const EntryFeeSection = ({ entryFee, contest, handleGoToCreateTeams }) => {
   return (
     <div className="flex flex-col text-white">
       <div className="flex flex-col px-8 py-2 w-full text-3xl font-bold leading-none rounded-lg bg-emerald-400 bg-opacity-10 max-md:px-5">
@@ -147,7 +149,7 @@ const EntryFeeSection = ({ entryFee, contestId, handleGoToCreateTeams }) => {
           <span>{entryFee}</span>
         </div>
       </div>
-      <button onClick={() => handleGoToCreateTeams(contestId)} className="self-center mt-4 text-[21px] text-white bg-[#3FD68C] px-4 py-2 h-[47px] w-[157px] font-semibold rounded-md flex items-center justify-center">
+      <button onClick={() => handleGoToCreateTeams(contest)} className="self-center mt-4 text-[21px] text-white bg-[#3FD68C] px-4 py-2 h-[47px] w-[157px] font-semibold rounded-md flex items-center justify-center">
         Join Now <span className="ml-2">➜</span>
       </button>
     </div>

@@ -185,7 +185,11 @@ const CaptainPage = () => {
 
           <div className="bg-black rounded-lg p-4">
             {selectedStocks.length > 0 ? (
-              selectedStocks.map((stock, index) => (
+              selectedStocks.map((stock, index) => {
+                const cleanSymbol = stock.symbol?.split(".")[0] || "";
+                const imageUrl = `https://images.dhan.co/symbol/${cleanSymbol}.png`;
+
+                return (
                 <div 
                   key={index} 
                   className={`flex items-center justify-between p-3 mb-3 rounded-lg border-l-4 ${
@@ -193,7 +197,7 @@ const CaptainPage = () => {
                   } bg-zinc-800 text-white`}
                 >
                   <div className="flex items-center gap-3">
-                    <img src={stock.image} alt={stock.name} className="w-12 h-12 rounded-full" />
+                    <img src={imageUrl} alt={stock.name} className="w-12 h-12 rounded-full" />
                     <div>
                       <h3 className="text-lg font-bold">{stock.name}</h3>
                       <p className="text-sm text-gray-400">{stock.sector}</p>
@@ -227,7 +231,8 @@ const CaptainPage = () => {
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
             ) : (
               <p className="text-white text-center">No stocks selected</p>
             )}
