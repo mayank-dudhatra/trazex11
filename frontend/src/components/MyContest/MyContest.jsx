@@ -1,10 +1,9 @@
 
 
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
-import axios from "axios";
+import apiClient from "../../services/apiClient";
 
 // ProgressBar Component
 const ProgressBar = ({ spotsLeft, totalSpots }) => {
@@ -37,9 +36,9 @@ const EntryFeeSection = ({ entryFee, firstPrize }) => {
             src="https://res.cloudinary.com/dbrb9ptmn/image/upload/v1739714517/lupnj6inuaripexhfc4w.png"
             alt="coins"
           />
-          <span>Awaited!</span>
+          <span>Entry ₹{entryFee}</span>
         </div>
-        <h2 className="text-[#c5c5c5] font-medium mt-2">{firstPrize} Coins</h2>
+        <h2 className="text-[#c5c5c5] font-medium mt-2">Top Prize ₹{firstPrize}</h2>
       </div>
     </div>
   );
@@ -61,12 +60,12 @@ const GuaranteedPlusHeader = ({ name, entryFee, spotsLeft, totalSpots, prize, fi
         </div>
         <div className="flex flex-wrap gap-5">
           <p className="mt-2 text-5xl font-bold leading-none text-white max-md:text-4xl">
-            {prize} Coins
+            ₹{prize}
           </p>
         </div>
       </div>
       <ProgressBar spotsLeft={spotsLeft} totalSpots={totalSpots} />
-      <EntryFeeSection firstPrize={firstPrize} />
+      <EntryFeeSection firstPrize={firstPrize} entryFee={entryFee} />
     </div>
   );
 };
@@ -83,7 +82,7 @@ const StatsSection = ({ prize, firstPrize, maximumTeam, winPercentage }) => {
             className="object-contain shrink-0 self-stretch my-auto aspect-square w-[35px]"
             alt="Stats Icon"
           />
-          <span className="self-stretch leading-relaxed">{firstPrize}</span>
+          <span className="self-stretch leading-relaxed">₹{firstPrize}</span>
           <div className="shrink-0 self-stretch my-auto w-px h-9 border border-white border-solid" />
           <span className="flex items-center justify-center w-8 h-8 text-lg font-semibold text-white border-2 border-stone-300 rounded-lg">
             M
@@ -107,7 +106,7 @@ const StatsSection = ({ prize, firstPrize, maximumTeam, winPercentage }) => {
           className="object-contain shrink-0 my-auto w-8 aspect-[1.68]"
           alt="Total Amount Icon"
         />
-        <span>{prize}</span>
+        <span>₹{prize}</span>
         <img
           src="https://cdn.builder.io/api/v1/image/assets/TEMP/41ccfc38390615e5dcc4424b858b95819238dc694198d88f05c1c2f6787e3172"
           alt="coin"
@@ -162,11 +161,11 @@ const MyContest = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get(`https://trazex11-4.onrender.com/api/contests/user/${userId}`);
-      setJoinedContests(response.data);
+      const response = await apiClient.get('/contests/user');
+      setJoinedContests(response?.data?.contests || []);
     } catch (error) {
-      console.error("Error fetching joined contests:", error);
-      setError(error.message || "Failed to fetch contests");
+      console.error("Error fetching joined contests:", error.response?.data || error.message);
+      setError(error?.response?.data?.message || error.message || "Failed to fetch contests");
     } finally {
       setLoading(false);
     }
@@ -190,9 +189,16 @@ const MyContest = () => {
             <p className="text-red-500 text-center">{error}</p>
           ) : joinedContests.length > 0 ? (
             joinedContests.map((contest) => {
-              const numTeams = contest.joinedTeams.filter(
-                (team) => team.userId.toString() === userId
-              ).length;
+              const prizePool = contest.prizePool || 0;
+              const totalSpots = contest.totalSpots || 0;
+              const filledSpots = contest.filledSpots || 0;
+              const spotsLeft = Math.max(totalSpots - filledSpots, 0);
+              const firstPrize = contest.prizeBreakup?.find((range) => range.rankFrom === 1)?.prizeEach
+                || contest.prizeBreakup?.[0]?.prizeEach
+                || 0;
+              const totalWinners = contest.prizeBreakup?.reduce((sum, range) => sum + Number(range.winners || 0), 0) || 0;
+              const winPercentage = totalSpots > 0 ? Math.round((totalWinners / totalSpots) * 100) : 0;
+              const numTeams = contest.userTeamsCount || 0;
               return (
                 <article
                   key={contest._id}
@@ -201,16 +207,16 @@ const MyContest = () => {
                   <GuaranteedPlusHeader
                     name={contest.name}
                     entryFee={contest.entryFee}
-                    spotsLeft={contest.spotsLeft}
-                    totalSpots={contest.totalSpots}
-                    prize={contest.prize}
-                    firstPrize={contest.firstprize}
+                    spotsLeft={spotsLeft}
+                    totalSpots={totalSpots}
+                    prize={prizePool}
+                    firstPrize={firstPrize}
                   />
                   <StatsSection
-                    prize={contest.prize}
-                    firstPrize={contest.firstprize}
-                    maximumTeam={contest.maximumteam}
-                    winPercentage={contest.winpercentage}
+                    prize={prizePool}
+                    firstPrize={firstPrize}
+                    maximumTeam={contest.maximumTeamPerUser}
+                    winPercentage={winPercentage}
                   />
                   <TeamInfo onToggle={() => handleToggle(contest._id)} numTeams={numTeams} />
                   {showMyTeam === contest._id && <MyTeam contestId={contest._id} />}
@@ -243,13 +249,12 @@ const MyTeam = ({ contestId }) => {
       setLoading(true);
       setError(null);
       try {
-        const userId = localStorage.getItem("userId");
-        if (!userId) throw new Error("User ID not found in localStorage");
-        const response = await axios.get(`https://trazex11-4.onrender.com/api/contests/teams/${userId}/${contestId}`);
-        setTeams(Array.isArray(response.data) ? response.data : [response.data]);
+        if (!contestId) throw new Error("Contest ID is missing");
+        const response = await apiClient.get(`/contests/${contestId}/teams`);
+        setTeams(response?.data?.teams || []);
       } catch (error) {
-        console.error("Error fetching teams:", error);
-        setError(error.message || "Failed to fetch team data");
+        console.error("Error fetching teams:", error.response?.data || error.message);
+        setError(error?.response?.data?.message || error.message || "Failed to fetch team data");
       } finally {
         setLoading(false);
       }
@@ -278,23 +283,17 @@ const MyTeam = ({ contestId }) => {
               </div>
               <div className="flex gap-10 items-center text-stone-300">
                 <div className="flex flex-col items-center">
-                  <img
-                    loading="lazy"
-                    src={team.captain.image}
-                    className="object-contain w-[90px]"
-                    alt={team.captain.name}
-                  />
-                  <span className="mt-2 text-white">{team.captain.name}</span>
+                  <div className="w-[90px] h-[90px] rounded-full bg-white/10 flex items-center justify-center text-white text-sm">
+                    {team.captain?.stockSymbol || 'C'}
+                  </div>
+                  <span className="mt-2 text-white">{team.captain?.stockSymbol || 'Captain'}</span>
                   <span className="text-sm text-gray-300">C</span>
                 </div>
                 <div className="flex flex-col items-center">
-                  <img
-                    loading="lazy"
-                    src={team.viceCaptain.image}
-                    className="object-contain w-[90px]"
-                    alt={team.viceCaptain.name}
-                  />
-                  <span className="mt-2 text-white">{team.viceCaptain.name}</span>
+                  <div className="w-[90px] h-[90px] rounded-full bg-white/10 flex items-center justify-center text-white text-sm">
+                    {team.viceCaptain?.stockSymbol || 'VC'}
+                  </div>
+                  <span className="mt-2 text-white">{team.viceCaptain?.stockSymbol || 'Vice Captain'}</span>
                   <span className="text-sm text-gray-300">VC</span>
                 </div>
               </div>
