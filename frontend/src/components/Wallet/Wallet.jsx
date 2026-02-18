@@ -1,18 +1,61 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
+import apiClient from "../../services/apiClient";
 
-const coinStatuses = [
-
-  { amount: 0, label: "Winning Coin", iconUrl: "https://cdn.builder.io/api/v1/image/assets/TEMP/5a9a9dbceb0501e3fc86b66e6a57dfefbeddd840bd55d2aa6194988776332da8", coinUrl: "https://cdn.builder.io/api/v1/image/assets/TEMP/41ccfc38390615e5dcc4424b858b95819238dc694198d88f05c1c2f6787e3172" },
-  { amount: 0, label: "Losses Coin", iconUrl: "https://cdn.builder.io/api/v1/image/assets/TEMP/5a9a9dbceb0501e3fc86b66e6a57dfefbeddd840bd55d2aa6194988776332da8", coinUrl: "https://cdn.builder.io/api/v1/image/assets/TEMP/41ccfc38390615e5dcc4424b858b95819238dc694198d88f05c1c2f6787e3172" },
-];
-
-const transactions = [
-  { id: "0D567H4", title: "Stock Challenge Joined", status: "Completed", amount: 50, iconUrl: "https://cdn.builder.io/api/v1/image/assets/TEMP/f7b6a7bdba7171930f03b1d79f872cd6e053cacd636698f1ab5f8cb3469b5205" },
-];
+const coinIcon = "https://cdn.builder.io/api/v1/image/assets/TEMP/41ccfc38390615e5dcc4424b858b95819238dc694198d88f05c1c2f6787e3172";
+const statusIcon = "https://cdn.builder.io/api/v1/image/assets/TEMP/5a9a9dbceb0501e3fc86b66e6a57dfefbeddd840bd55d2aa6194988776332da8";
+const transactionIcon = "https://cdn.builder.io/api/v1/image/assets/TEMP/f7b6a7bdba7171930f03b1d79f872cd6e053cacd636698f1ab5f8cb3469b5205";
 
 const BalanceCard = () => {
+  const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchWallet = async () => {
+      try {
+        const response = await apiClient.get("/wallet");
+        const data = response?.data?.data || {};
+        setBalance(Number(data.balance) || 0);
+        setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+      } catch (err) {
+        console.error("Error fetching wallet:", err?.response?.data || err.message);
+        setError("Failed to load wallet data.");
+      }
+    };
+
+    fetchWallet();
+  }, []);
+
+  const totals = useMemo(() => {
+    let credit = 0;
+    let debit = 0;
+
+    transactions.forEach((tx) => {
+      const amount = Number(tx.amount) || 0;
+      if (tx.type === "CREDIT") {
+        credit += amount;
+      } else if (tx.type === "DEBIT") {
+        debit += amount;
+      }
+    });
+
+    return { credit, debit };
+  }, [transactions]);
+
+  const coinStatuses = [
+    { amount: totals.credit, label: "Winning Coin", iconUrl: statusIcon, coinUrl: coinIcon },
+    { amount: totals.debit, label: "Losses Coin", iconUrl: statusIcon, coinUrl: coinIcon }
+  ];
+
+  const formatDate = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" });
+  };
+
   return (
     <>
     <Navbar />
@@ -23,11 +66,11 @@ const BalanceCard = () => {
           <h1 className="text-2xl font-semibold text-white">Balance Amount</h1>
           <div className="flex items-center gap-3 text-3xl font-bold text-white">
             <img
-              src="https://cdn.builder.io/api/v1/image/assets/TEMP/41ccfc38390615e5dcc4424b858b95819238dc694198d88f05c1c2f6787e3172"
+              src={coinIcon}
               className="w-8 h-8"
               alt="Balance icon"
             />
-            <span>50</span>
+            <span>{balance}</span>
           </div>
         </div>
 
@@ -59,32 +102,45 @@ const BalanceCard = () => {
           />
           Transaction
         </h2>
-        <p className="text-center text-white text-sm mt-2">25 February 2025</p>
+        {error && <p className="text-center text-red-500 text-sm mt-2">{error}</p>}
 
         <div className="mt-4">
-          {transactions.map((transaction, index) => (
-            <div key={index} className="flex items-center justify-between p-4 bg-[#1f1f1f] rounded-lg mt-2">
-              <div className="flex items-center gap-4">
-                {/* Red Warning Icon */}
-                
-                <img src={transaction.iconUrl} alt="Icon" className="h-14 w-14" />
-                <div>
-                  <h3 className="text-xl text-white">{transaction.title}</h3>
-                  <p className="text-sm text-stone-400 mt-3">Transaction ID : {transaction.id}</p>
+          {transactions.length === 0 ? (
+            <p className="text-center text-white text-sm mt-2">No transactions yet.</p>
+          ) : (
+            transactions.map((transaction, index) => {
+              const isCredit = transaction.type === "CREDIT";
+              const amount = Number(transaction.amount) || 0;
+              const title = transaction.reason || (isCredit ? "Wallet Credit" : "Wallet Debit");
+              const txId = transaction.createdAt || `TX-${index + 1}`;
+
+              return (
+                <div key={`${txId}-${index}`} className="flex items-center justify-between p-4 bg-[#1f1f1f] rounded-lg mt-2">
+                  <div className="flex items-center gap-4">
+                    <img src={transactionIcon} alt="Icon" className="h-14 w-14" />
+                    <div>
+                      <h3 className="text-xl text-white">{title}</h3>
+                      <p className="text-sm text-stone-400 mt-3">
+                        Transaction ID : {txId}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={isCredit ? "text-green-500 text-xl font-semibold" : "text-red-500 text-xl font-semibold"}>
+                    {isCredit ? "Credited" : "Debited"}
+                  </span>
+                  <div className="flex items-center gap-1 text-white">
+                    <span className="text-2xl font-extrabold">{isCredit ? "+" : "-"}</span>
+                    <img
+                      src={coinIcon}
+                      className="w-7 h-7"
+                      alt="Coin icon"
+                    />
+                    <span className="text-3xl font-bold">{amount}</span>
+                  </div>
                 </div>
-              </div>
-              <span className="text-green-500 text-xl font-semibold">{transaction.status}</span>
-              <div className="flex items-center gap-1 text-white">
-                <span className="text-2xl font-extrabold">-</span>
-                <img
-                  src="https://cdn.builder.io/api/v1/image/assets/TEMP/d597581cad8a57f2b03689920ee68928ed438964d156c8cebab9a5e8ed0cb7f1"
-                  className="w-7 h-7"
-                  alt="Coin icon"
-                />
-                <span className="text-3xl font-bold">{transaction.amount}</span>
-              </div>
-            </div>
-          ))}
+              );
+            })
+          )}
         </div>
       </section>
     </main>

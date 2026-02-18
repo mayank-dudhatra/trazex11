@@ -30,6 +30,10 @@ function Register() {
         password: formData.password,
       });
       const userId = response?.data?.user?.id || response?.data?.user?._id || '';
+      const userRole = response?.data?.user?.role || '';
+      if (userRole) {
+        localStorage.setItem('userRole', userRole);
+      }
       if (userId) {
         localStorage.setItem('userId', userId);
       }

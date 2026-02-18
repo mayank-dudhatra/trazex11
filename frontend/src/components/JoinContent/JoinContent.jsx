@@ -294,7 +294,7 @@ import { useEffect, useState } from "react";
 import apiClient from "../../services/apiClient";
 import { toast, ToastContainer } from "react-toastify"; // Import ToastContainer
 import "react-toastify/dist/ReactToastify.css"; // Import CSS for styling
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const JoinContest = ({ setIsOpen }) => {
   const [contestId, setContestId] = useState(null);
@@ -304,6 +304,7 @@ const JoinContest = ({ setIsOpen }) => {
   const [captain, setCaptain] = useState(null);
   const [viceCaptain, setViceCaptain] = useState(null);
   const [entryFee, setEntryFee] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const storedContestId = localStorage.getItem("contestId");
@@ -365,6 +366,11 @@ const JoinContest = ({ setIsOpen }) => {
 
   const handleSave = async () => {
     toast.info("Starting team creation process..."); // Debug toast
+    const userRole = localStorage.getItem("userRole");
+    if (!userRole || userRole !== "user") {
+      toast.error("Please login with a user account to join contests.");
+      return;
+    }
     if (!contestId || !userId || selectedStocks.length === 0 || !captain || !viceCaptain) {
       toast.error("Missing details! Please check console.");
       console.error("Missing details:", { contestId, userId, selectedStocks, captain, viceCaptain });
@@ -372,31 +378,24 @@ const JoinContest = ({ setIsOpen }) => {
     }
 
     const payload = {
-      userId,
       contestId,
       stocks: selectedStocks.map((stock) => ({
-        name: stock.name,
-        action: stock.type,
-        sector: stock.sector,
-        image: stock.image,
+        stockSymbol: stock.symbol,
+        action: stock.type?.toUpperCase() || stock.type,
       })),
       captain: {
-        name: captain.name,
-        action: captain.type,
-        sector: captain.sector,
-        image: captain.image,
+        stockSymbol: captain.symbol,
+        action: captain.type?.toUpperCase() || captain.type,
       },
       viceCaptain: {
-        name: viceCaptain.name,
-        action: viceCaptain.type,
-        sector: viceCaptain.sector,
-        image: viceCaptain.image,
+        stockSymbol: viceCaptain.symbol,
+        action: viceCaptain.type?.toUpperCase() || viceCaptain.type,
       },
     };
 
     try {
       console.log("Sending request to create team:", payload);
-      const response = await apiClient.post("/team/create-team", payload);
+      const response = await apiClient.post("/teams", payload);
 
       const newTeamId = response.data.team?._id;
       if (!newTeamId) {
@@ -409,10 +408,26 @@ const JoinContest = ({ setIsOpen }) => {
       setTeamId(newTeamId);
       toast.success("Team successfully created!");
 
-      await joinContest(newTeamId, contestId, userId);
-      setIsOpen(false); // Close modal only after success
+      const joined = await joinContest(newTeamId, contestId, userId);
+      if (joined) {
+        setIsOpen(false);
+        navigate("/mycontest");
+      }
     } catch (error) {
+      const status = error?.response?.status;
+      const message = error?.response?.data?.message || error?.message;
       console.error("Error creating team:", error.response ? error.response.data : error.message);
+      if (status === 403 && message === 'Access denied. User privileges required.') {
+        try {
+          await apiClient.post('/auth/logout');
+        } catch (logoutError) {
+          console.error('Logout failed:', logoutError?.response?.data || logoutError.message);
+        }
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userId');
+        toast.error('Admin session detected. Please log in with a user account.');
+        return;
+      }
       toast.error("Failed to create team. Try again.");
     }
   };
@@ -420,7 +435,7 @@ const JoinContest = ({ setIsOpen }) => {
   const joinContest = async (teamId, contestId, userId) => {
     if (!teamId) {
       toast.error("Invalid team ID.");
-      return;
+      return false;
     }
 
     const joinPayload = { teamId, contestId, userId };
@@ -428,9 +443,11 @@ const JoinContest = ({ setIsOpen }) => {
     try {
       const response = await apiClient.post(`/contests/${contestId}/join`, joinPayload);
       toast.success("Successfully joined the contest!");
+      return true;
     } catch (error) {
       console.error("Error joining contest:", error.response ? error.response.data : error.message);
       toast.error("Failed to join contest. Try again.");
+      return false;
     }
   };
 
@@ -490,14 +507,12 @@ const JoinContest = ({ setIsOpen }) => {
             {entryFee}
           </span>
         </div>
-        <Link to="/mycontest">
-          <button
-            onClick={handleSave}
-            className="w-full mt-9 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-md"
-          >
-            Join Contest
-          </button>
-        </Link>
+        <button
+          onClick={handleSave}
+          className="w-full mt-9 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-md"
+        >
+          Join Contest
+        </button>
       </div>
     </div>
   );

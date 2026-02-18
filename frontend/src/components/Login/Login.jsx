@@ -25,6 +25,21 @@ function Login() {
     try {
       const response = await apiClient.post('/auth/login', formData);
       const userId = response?.data?.user?.id || response?.data?.user?._id || '';
+      const userRole = response?.data?.user?.role || '';
+      if (userRole) {
+        localStorage.setItem('userRole', userRole);
+      }
+      if (userRole && userRole !== 'user') {
+        try {
+          await apiClient.post('/auth/logout');
+        } catch (logoutError) {
+          console.error('Logout failed:', logoutError?.response?.data || logoutError.message);
+        }
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userId');
+        setError('Please login with a user account to join contests.');
+        return;
+      }
       if (userId) {
         localStorage.setItem('userId', userId);
       }
