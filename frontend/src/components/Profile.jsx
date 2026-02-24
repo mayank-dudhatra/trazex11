@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import apiClient from '../services/apiClient';
 
 function Profile() {
   const [user, setUser] = useState(null);
@@ -12,7 +12,7 @@ function Profile() {
         return;
       }
       try {
-        const res = await axios.get(`http://localhost:3000/users/67a0786880defe17d75aea92`);
+        const res = await apiClient.get('/users/67a0786880defe17d75aea92');
         setUser(res.data);
       } catch (error) {
         alert('Error fetching user data');

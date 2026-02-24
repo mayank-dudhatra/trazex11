@@ -80,7 +80,7 @@
 
 //     try {
 //       console.log("Payload", payload)
-//       const response = await axios.post("http://localhost:3000/api/team/create-team", payload);
+//       const response = await apiClient.post("/team/create-team", payload);
 //       console.log("Team created successfully:", response.data);
       
 //       toast.success( "Team successfully created!", {
@@ -198,7 +198,7 @@
 
 //     try {
 //       console.log("Sending request to create team:", payload);
-//       const response = await axios.post("https://trazex11-4.onrender.com/api/team/create-team", payload);
+//       const response = await apiClient.post("/team/create-team", payload);
 //       console.log("API Response:", response.data);
 
 //       // Extract teamId properly from the response
@@ -235,7 +235,7 @@
 
 //     try {
 //       console.log("Sending request to join contest:", joinPayload);
-//       const response = await axios.post("https://trazex11-4.onrender.com/api/contests/join", joinPayload);
+//       const response = await apiClient.post("/contests/join", joinPayload);
 //       console.log("Joined contest successfully:", response.data);
 //       toast.success("Successfully joined the contest!");
 //     } catch (error) {

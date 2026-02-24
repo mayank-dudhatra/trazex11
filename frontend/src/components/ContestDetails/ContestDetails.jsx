@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
+import apiClient from "../../services/apiClient";
 
 
 
@@ -15,8 +17,8 @@ const ContestDetails = ({ date }) => {
     const encodedDate = encodeURIComponent(date); // Encode the date properly
     console.log("Fetching contests for:", date, "Encoded:", encodedDate);
 
-    fetch(`https://trazex11-4.onrender.com/api/contests/date/${encodedDate}`)
-    .then((res) => res.json())
+    apiClient.get(`/contests/date/${encodedDate}`)
+    .then((res) => res.data)
     .then((data) => {
         
       console.log("API Response:", data); // Check response here
