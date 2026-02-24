@@ -41,7 +41,7 @@ function Navbar() {
            <Link to="/home"> <div className='element1'>Home</div></Link>
             <Link to="/newcontents"> <div className='element1'>Contents</div></Link>
            <Link to="/mycontest"> <div className='element1'>My Contents</div></Link>
-           <Link to='/myteams'><div className='element1'>Teams</div></Link>
+           {/* <Link to='/myteams'><div className='element1'>Teams</div></Link> */}
            <Link to='/leaderboard'> <div className='element1'>LeaderBoard</div></Link>
            <Link to="/screener"> <div className='element1'>Screener</div></Link>
            <Link to="/aboutus"> <div className='element1'>About us</div></Link>

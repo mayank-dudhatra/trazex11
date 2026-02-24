@@ -6,7 +6,7 @@ import io from 'socket.io-client';
  * Handles real-time stock price updates via WebSocket
  */
 
-const SOCKET_SERVER_URL = import.meta.env.VITE_API_URL;
+const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL;
 
 class StockSocketClient {
   constructor() {
@@ -26,13 +26,18 @@ class StockSocketClient {
       return;
     }
 
+    if (!SOCKET_SERVER_URL) {
+      console.warn('⚠️ Socket URL is not configured');
+      return null;
+    }
+
     try {
       this.socket = io(SOCKET_SERVER_URL, {
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: 5,
-        transports: ['websocket', 'polling']
+        transports: ['polling', 'websocket']
       });
 
       // Connection events

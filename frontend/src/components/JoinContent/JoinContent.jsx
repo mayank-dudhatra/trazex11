@@ -304,6 +304,7 @@ const JoinContest = ({ setIsOpen }) => {
   const [captain, setCaptain] = useState(null);
   const [viceCaptain, setViceCaptain] = useState(null);
   const [entryFee, setEntryFee] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -315,9 +316,9 @@ const JoinContest = ({ setIsOpen }) => {
     setViceCaptain(JSON.parse(localStorage.getItem("viceCaptain")));
 
     const storedEntryFee = Number(localStorage.getItem("contestEntryFee"));
-    if (!Number.isNaN(storedEntryFee) && storedEntryFee > 0) {
+    const hasStoredEntryFee = !Number.isNaN(storedEntryFee) && storedEntryFee > 0;
+    if (hasStoredEntryFee) {
       setEntryFee(storedEntryFee);
-      return;
     }
 
     const fetchContestDetails = async () => {
@@ -361,7 +362,21 @@ const JoinContest = ({ setIsOpen }) => {
       }
     };
 
-    fetchContestDetails();
+    const fetchWalletBalance = async () => {
+      try {
+        const walletResponse = await apiClient.get('/wallet');
+        const balance = Number(walletResponse?.data?.data?.balance) || 0;
+        setWalletBalance(balance);
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error?.response?.data || error.message);
+      }
+    };
+
+    if (!hasStoredEntryFee) {
+      fetchContestDetails();
+    }
+
+    fetchWalletBalance();
   }, []);
 
   const handleSave = async () => {
@@ -392,6 +407,22 @@ const JoinContest = ({ setIsOpen }) => {
         action: viceCaptain.type?.toUpperCase() || viceCaptain.type,
       },
     };
+
+    const requiredEntryFee = Number(entryFee) || 0;
+    let currentWalletBalance = Number(walletBalance) || 0;
+
+    try {
+      const walletResponse = await apiClient.get('/wallet');
+      currentWalletBalance = Number(walletResponse?.data?.data?.balance) || currentWalletBalance;
+      setWalletBalance(currentWalletBalance);
+    } catch (error) {
+      console.error('Error refreshing wallet balance:', error?.response?.data || error.message);
+    }
+
+    if (currentWalletBalance < requiredEntryFee) {
+      toast.error(`Insufficient wallet balance. Required: ${requiredEntryFee}, Available: ${currentWalletBalance}`);
+      return;
+    }
 
     try {
       console.log("Sending request to create team:", payload);
@@ -445,8 +476,9 @@ const JoinContest = ({ setIsOpen }) => {
       toast.success("Successfully joined the contest!");
       return true;
     } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to join contest. Try again.';
       console.error("Error joining contest:", error.response ? error.response.data : error.message);
-      toast.error("Failed to join contest. Try again.");
+      toast.error(message);
       return false;
     }
   };
