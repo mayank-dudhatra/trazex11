@@ -1,115 +1,134 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
+import { fetchTeamById, fetchTeamsByContest } from "../../services/api";
+import { stockSocket } from "../../services/stockSocket";
 
-const ProfileCard = () => {
-  const [teams, setTeams] = useState([]);
+const MyTeamPage = () => {
+  const [team, setTeam] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [flash, setFlash] = useState(false);
+  const flashTimer = useRef(null);
+
+  const teamId = localStorage.getItem("teamId") || "";
+  const contestId = localStorage.getItem("contestId") || "";
 
   useEffect(() => {
-    const fetchUserTeams = async () => {
+    const loadTeam = async () => {
+      setLoading(true);
+      setError("");
       try {
-        const userId = localStorage.getItem("userId"); // Get logged-in userId
-        if (!userId) {
-          console.error("User not logged in.");
-          return;
+        if (teamId) {
+          const response = await fetchTeamById(teamId);
+          if (response?.team) {
+            setTeam(response.team);
+            return;
+          }
         }
 
-        const response = await fetch(`https://trazex11-4.onrender.com/api/team/user/${userId}`);
-        if (!response.ok) {
-          throw new Error("Failed to fetch team data");
+        if (contestId) {
+          const response = await fetchTeamsByContest(contestId);
+          const teams = response?.teams || [];
+          if (teams.length) {
+            const selected = teamId
+              ? teams.find((t) => t._id?.toString() === teamId)
+              : teams[0];
+            setTeam(selected || teams[0]);
+            return;
+          }
         }
 
-        const fetchedTeams = await response.json();
-        setTeams(fetchedTeams); // Store all teams in state
-      } catch (error) {
-        console.error("Error fetching team data:", error.message);
+        setTeam(null);
+        setError("No team data available.");
+      } catch (loadError) {
+        setError(loadError?.message || "Failed to load team.");
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchUserTeams();
-  }, []);
+    loadTeam();
+  }, [teamId, contestId]);
+
+  useEffect(() => {
+    const handleTeamUpdate = (payload) => {
+      if (!payload?.teamId) return;
+      if (teamId && payload.teamId.toString() !== teamId.toString()) return;
+
+      setTeam((prev) => (prev ? { ...prev, ...payload } : prev));
+      setFlash(true);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlash(false), 800);
+    };
+
+    stockSocket.onTeamUpdate(handleTeamUpdate);
+    return () => {
+      stockSocket.offTeamUpdate(handleTeamUpdate);
+    };
+  }, [teamId]);
+
+  const stockRows = useMemo(() => team?.stocks || [], [team]);
 
   return (
     <>
       <Navbar />
+      <div className="min-h-screen bg-black px-4 py-10 text-white">
+        <div className="mx-auto w-full max-w-[1130px]">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-2xl font-semibold">My Team</h1>
+            <div className="text-sm text-white/60">
+              Live Points: {team?.totalPoints?.toFixed?.(2) ?? "0.00"}
+            </div>
+          </div>
 
-      <div className="flex overflow-hidden flex-col items-center px-20 pt-28 bg-black pb-20 max-md:px-5 max-md:py-24 relative">
-        {teams.length === 0 ? (
-          <p className="text-white text-xl">No teams found. Create a new team!</p>
-        ) : (
-          teams.map((team, index) => (
-            <div key={index} className="flex relative flex-col pb-4 w-full rounded-2xl max-w-[1150px] min-h-[280px] max-md:max-w-full mb-8">
-              {/* Background Image */}
-              <img
-                loading="lazy"
-                src="https://cdn.builder.io/api/v1/image/assets/TEMP/7d8180c58adbc9e969ee32cf4624bbdd53cf3b5921822df80477344cd64f4b6a?apiKey=f5294c2440c849e09806e1501d656072"
-                alt=""
-                className="object-cover absolute inset-0 size-full"
-              />
+          {loading && <p className="mt-6 text-white/70">Loading team...</p>}
+          {error && <p className="mt-6 text-red-400">{error}</p>}
 
-              {/* Profile Header */}
-              <div className="flex relative flex-wrap gap-5 justify-between px-7 py-2 w-full rounded-2xl bg-black bg-opacity-40 max-md:pr-5 max-md:max-w-full">
-                <div className="my-auto text-3xl font-bold text-[#c5c5c5]">
-                  {team.teamName || `Team ${index + 1}`}
+          {!loading && !error && team && (
+            <div className={`mt-6 rounded-2xl border border-white/10 bg-white/5 p-6 ${flash ? 'ring-2 ring-emerald-400/60' : ''}`}>
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="text-lg font-semibold">Team {team._id?.slice(-6)}</div>
+                <div className="rounded-full bg-emerald-500/20 px-3 py-1 text-xs text-emerald-100">
+                  Live updating
                 </div>
               </div>
 
-              {/* Stats & Company Logos */}
-              <div className="flex relative flex-wrap gap-5 justify-between self-center mt-7 w-full max-w-[1031px] max-md:max-w-full">
-                {/* Buy & Sell Count */}
-                <div className="flex gap-10 self-start font-bold text-[#c5c5c5] whitespace-nowrap">
-                  <StatBox label="BUY" value={team.stocks.filter(stock => stock.action === "BUY").length} />
-                  <StatBox label="SELL" value={team.stocks.filter(stock => stock.action === "SELL").length} />
-                </div>
-
-                {/* Captain & Vice-Captain */}
-                <div className="flex gap-10 text-lg font-semibold leading-5 text-center">
-                  {team.captain && <CompanyLogo name={team.captain.name} logoSrc={team.captain.image} badge="C" />}
-                  {team.viceCaptain && <CompanyLogo name={team.viceCaptain.name} logoSrc={team.viceCaptain.image} badge="VC" />}
-                </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {stockRows.map((stock) => {
+                  const isCaptain = team.captain?.stockSymbol === stock.stockSymbol;
+                  const isVice = team.viceCaptain?.stockSymbol === stock.stockSymbol;
+                  return (
+                    <div
+                      key={`${team._id}-${stock.stockSymbol}`}
+                      className={`rounded-xl border border-white/10 bg-black/30 p-4 ${
+                        isCaptain ? 'ring-1 ring-emerald-400/70' : isVice ? 'ring-1 ring-blue-400/70' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-base font-semibold">{stock.stockSymbol}</div>
+                          <div className="text-xs text-white/60">{stock.action}</div>
+                        </div>
+                        {isCaptain && (
+                          <span className="rounded-full bg-emerald-500/20 px-2 py-1 text-xs text-emerald-100">Captain 2x</span>
+                        )}
+                        {isVice && (
+                          <span className="rounded-full bg-blue-500/20 px-2 py-1 text-xs text-blue-100">Vice 1.5x</span>
+                        )}
+                      </div>
+                      <div className="mt-3 text-sm text-white/70">Stock points: Live update</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          ))
-        )}
+          )}
+        </div>
       </div>
-
-      {/* Create Team Button */}
-      <div className="flex justify-center items-center mt-5">
-        <Link
-          to="/Createteams"
-          className="px-6 py-3 text-lg font-semibold text-white bg-[#1f1f1f] rounded-lg shadow-lg hover:bg-[#80db60] transition-all"
-        >
-          Create Team
-        </Link>
-      </div>
-
       <Footer />
     </>
   );
 };
 
-// Stat Box Component
-const StatBox = ({ label, value }) => (
-  <div className="flex flex-col">
-    <div className="text-5xl text-white max-md:text-4xl">{label}</div>
-    <div className="self-center text-white mt-7 text-6xl max-md:text-4xl">{value}</div>
-  </div>
-);
-
-// Company Logo Component
-const CompanyLogo = ({ name, logoSrc, badge }) => (
-  <div className="relative flex flex-col self-end mt-8">
-    <div className="relative">
-      <img loading="lazy" src={logoSrc} alt={`${name} logo`} className="object-contain aspect-square w-[90px]" />
-      {badge && (
-        <div className="absolute top-0 left-0 bg-neutral-900 text-white border-[2px] border-stone-300 rounded-full h-6 w-6 flex items-center justify-center text-xs font-semibold">
-          {badge}
-        </div>
-      )}
-    </div>
-    <div className="self-start mt-4">{name}</div>
-  </div>
-);
-
-export default ProfileCard;
+export default MyTeamPage;

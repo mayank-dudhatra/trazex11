@@ -79,6 +79,26 @@ class StockSocketClient {
     this.socket.emit('request:stats');
   }
 
+  onLeaderboardUpdate(callback) {
+    if (!this.socket) return;
+    this.socket.on('leaderboardUpdate', callback);
+  }
+
+  offLeaderboardUpdate(callback) {
+    if (!this.socket) return;
+    this.socket.off('leaderboardUpdate', callback);
+  }
+
+  onTeamUpdate(callback) {
+    if (!this.socket) return;
+    this.socket.on('teamUpdate', callback);
+  }
+
+  offTeamUpdate(callback) {
+    if (!this.socket) return;
+    this.socket.off('teamUpdate', callback);
+  }
+
   /**
    * Subscribe to specific stock updates
    */

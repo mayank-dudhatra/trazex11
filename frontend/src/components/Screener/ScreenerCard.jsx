@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
 import Details from "./CardDetails";
-import apiClient from "../../services/apiClient";
+import { fetchStocks } from "../../services/api";
 import { useMultipleStocks } from "../../hooks/useStockLive";
 
 const StockCard = () => {
@@ -12,24 +12,33 @@ const StockCard = () => {
   const [showDetails, setShowDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [highlighted, setHighlighted] = useState({});
+  const highlightTimers = useRef({});
 
   const { stocks: liveStocks } = useMultipleStocks(symbols);
 
   const normalizeStock = (stock) => ({
     ...stock,
     LTP: stock.LTP ?? stock.price ?? null,
-    percentchange: stock.percentchange ?? stock.percentChange ?? null
+    percentchange: stock.percentchange ?? stock.percentChange ?? null,
+    dailyBuyPoints: stock.dailyBuyPoints ?? stock.buyPoints ?? 0,
+    dailyBuyBasePoints: stock.dailyBuyBasePoints ?? 0,
+    dailyBuyMilestonePoints: stock.dailyBuyMilestonePoints ?? 0,
+    dailySellPoints: stock.dailySellPoints ?? stock.sellPoints ?? 0,
+    dailySellBasePoints: stock.dailySellBasePoints ?? 0,
+    dailySellMilestonePoints: stock.dailySellMilestonePoints ?? 0,
+    dailyMilestonesHit: stock.dailyMilestonesHit ?? stock.dailyMilestones ?? {}
   });
 
   // Fetch stock data from backend
   useEffect(() => {
-    const fetchStocks = async () => {
+    const loadStocks = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get("/stocks", {
-          params: { exchange }
-        });
-        const list = response?.data?.data || [];
+        const response = await fetchStocks({ exchange });
+        const list = response?.data || [];
         setStocks(list.map(normalizeStock));
         setSymbols(list.map((stock) => stock.symbol));
         setLoading(false);
@@ -38,13 +47,33 @@ const StockCard = () => {
         setLoading(false);
       }
     };
-    fetchStocks();
+    loadStocks();
   }, [exchange]);
 
   useEffect(() => {
     if (!liveStocks || Object.keys(liveStocks).length === 0) {
       return;
     }
+
+    const changedSymbols = Object.keys(liveStocks);
+
+    setHighlighted((current) => {
+      const next = { ...current };
+      changedSymbols.forEach((symbol) => {
+        next[symbol] = true;
+      });
+      return next;
+    });
+
+    changedSymbols.forEach((symbol) => {
+      if (highlightTimers.current[symbol]) {
+        clearTimeout(highlightTimers.current[symbol]);
+      }
+
+      highlightTimers.current[symbol] = setTimeout(() => {
+        setHighlighted((current) => ({ ...current, [symbol]: false }));
+      }, 800);
+    });
 
     setStocks((prev) =>
       prev.map((stock) => {
@@ -54,6 +83,28 @@ const StockCard = () => {
       })
     );
   }, [liveStocks]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(highlightTimers.current).forEach((timerId) => clearTimeout(timerId));
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const filteredStocks = useMemo(() => {
+    if (!searchTerm) return stocks;
+    const term = searchTerm.toLowerCase();
+    return stocks.filter((stock) =>
+      stock.name?.toLowerCase().includes(term)
+      || stock.symbol?.toLowerCase().includes(term)
+    );
+  }, [stocks, searchTerm]);
 
   // Toggle details visibility for a specific stock
   const toggleDetails = (symbol) => {
@@ -113,18 +164,41 @@ const StockCard = () => {
         )}
         {error && <p className="text-red-500 text-lg">Error: {error}</p>}
 
+        <div className="w-[1130px]">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-white text-lg font-semibold">Live Stocks</div>
+            <div className="relative">
+              <input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search by symbol or name"
+                className="w-full md:w-[320px] rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/40"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Stock Cards */}
-        {!loading && !error && stocks.length > 0 && (
+        {!loading && !error && filteredStocks.length > 0 && (
           <div className="w-[1130px] space-y-5">
-            {stocks.map((stock) => (
+            {filteredStocks.map((stock) => (
               (() => {
                 const cleanSymbol = stock.symbol?.split(".")[0] || "";
                 const imageUrl = `https://images.dhan.co/symbol/${cleanSymbol}.png`;
+                const change = stock.change ?? 0;
+                const isNegative = change < 0;
+                const isHighlighted = highlighted[stock.symbol];
+                const baseBuyPoints = stock.dailyBuyBasePoints ?? 0;
+                const baseSellPoints = stock.dailySellBasePoints ?? 0;
+                const buyMilestoneBonus = stock.dailyBuyMilestonePoints ?? 0;
+                const sellMilestoneBonus = stock.dailySellMilestonePoints ?? 0;
 
                 return (
               <div
                 key={stock.symbol}
-                className="bg-[#1E1E1E] p-4 pt-2 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300"
+                className={`bg-[#1E1E1E] p-4 pt-2 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 ${
+                  isHighlighted ? 'ring-2 ring-emerald-400/60 shadow-emerald-400/20' : ''
+                }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -141,6 +215,7 @@ const StockCard = () => {
                         <p className="text-green-400 font-semibold bg-green-900 px-2 py-0.5 rounded text-xs">
                           LTP {stock.LTP?.toFixed(2) || "N/A"}
                         </p>
+                        <p className="text-white/60">Vol {stock.volume?.toLocaleString() || "0"}</p>
                       </div>
                     </div>
                   </div>
@@ -150,46 +225,124 @@ const StockCard = () => {
                     </p>
                     <p
                       className={`text-sm flex items-center ${
-                        stock.change < 0 ? "text-red-500" : "text-green-500"
+                        isNegative ? "text-red-500" : "text-green-500"
                       }`}
                     >
-                      {stock.change?.toFixed(2) || "0.00"} (
+                      {change?.toFixed(2) || "0.00"} (
                       {stock.percentchange?.toFixed(2) || "0.00"}%)
                       <img
                         src={
-                          stock.change < 0
+                          isNegative
                             ? "https://dhan.co/_next/static/media/loss.1d0f44e9.svg"
                             : "https://dhan.co/_next/static/media/profit.ac476bbb.svg"
                         }
                         className="ml-1 w-3 h-3"
-                        alt={stock.change < 0 ? "Down" : "Up"}
+                        alt={isNegative ? "Down" : "Up"}
                       />
                     </p>
                   </div>
                 </div>
 
-                {/* <div className="flex justify-between mt-4 text-white text-[20px]">
-                  <p className="text-green-400 font-semibold">
-                    <span className="text-white">BUY Points: </span>
-                    {stock.buyPoints || "N/A"}
-                  </p>
-                  <p className="text-red-500 font-semibold">
-                    <span className="text-white">SELL Points: </span>
-                    {stock.sellPoints || "N/A"}
-                  </p>
-                </div> */}
-
-
-<div className="flex justify-between mt-4 text-white text-[20px]">
-  <p className="text-green-400 font-semibold">
-    <span className="text-white">BUY Points: </span>
-    {stock.buyPoints ?? 0}
-  </p>
-  <p className="text-red-500 font-semibold">
-    <span className="text-white">SELL Points: </span>
-    {stock.sellPoints ?? 0}
-  </p>
-</div>
+                {/* Daily Points Display */}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+                    <div className="text-xs text-white/60 mb-1">BUY Points</div>
+                    <div className="text-2xl font-bold text-green-400">
+                      {stock.dailyBuyPoints ?? 0}
+                    </div>
+                    <div className="mt-1 text-xs text-white/60">
+                      Base {baseBuyPoints} + Milestone {buyMilestoneBonus}
+                    </div>
+                    {stock.dailyMilestonesHit && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {stock.dailyMilestonesHit.m2 && (
+                          <span className="text-[10px] bg-green-600/30 text-green-200 px-2 py-0.5 rounded">
+                            2%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m5 && (
+                          <span className="text-[10px] bg-green-600/30 text-green-200 px-2 py-0.5 rounded">
+                            5%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m10 && (
+                          <span className="text-[10px] bg-green-600/30 text-green-200 px-2 py-0.5 rounded">
+                            10%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m15 && (
+                          <span className="text-[10px] bg-green-600/30 text-green-200 px-2 py-0.5 rounded">
+                            15%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.dayHigh && (
+                          <span className="text-[10px] bg-yellow-600/30 text-yellow-200 px-2 py-0.5 rounded">
+                            Day High
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.volume2x && (
+                          <span className="text-[10px] bg-blue-600/30 text-blue-200 px-2 py-0.5 rounded">
+                            Vol 2x
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.volume3x && (
+                          <span className="text-[10px] bg-purple-600/30 text-purple-200 px-2 py-0.5 rounded">
+                            Vol 3x
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                    <div className="text-xs text-white/60 mb-1">SELL Points</div>
+                    <div className="text-2xl font-bold text-red-400">
+                      {stock.dailySellPoints ?? 0}
+                    </div>
+                    <div className="mt-1 text-xs text-white/60">
+                      Base {baseSellPoints} + Milestone {sellMilestoneBonus}
+                    </div>
+                    {stock.dailyMilestonesHit && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {stock.dailyMilestonesHit.m2 && (
+                          <span className="text-[10px] bg-red-600/30 text-red-200 px-2 py-0.5 rounded">
+                            2%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m5 && (
+                          <span className="text-[10px] bg-red-600/30 text-red-200 px-2 py-0.5 rounded">
+                            5%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m10 && (
+                          <span className="text-[10px] bg-red-600/30 text-red-200 px-2 py-0.5 rounded">
+                            10%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.m15 && (
+                          <span className="text-[10px] bg-red-600/30 text-red-200 px-2 py-0.5 rounded">
+                            15%
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.dayLow && (
+                          <span className="text-[10px] bg-yellow-600/30 text-yellow-200 px-2 py-0.5 rounded">
+                            Day Low
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.volume2x && (
+                          <span className="text-[10px] bg-blue-600/30 text-blue-200 px-2 py-0.5 rounded">
+                            Vol 2x
+                          </span>
+                        )}
+                        {stock.dailyMilestonesHit.volume3x && (
+                          <span className="text-[10px] bg-purple-600/30 text-purple-200 px-2 py-0.5 rounded">
+                            Vol 3x
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
 
                 <div className="flex justify-between items-center mt-3 text-gray-400 text-[18px] border-t border-gray-700 pt-3">
@@ -216,7 +369,7 @@ const StockCard = () => {
           </div>
         )}
 
-        {!loading && !error && stocks.length === 0 && (
+        {!loading && !error && filteredStocks.length === 0 && (
           <p className="text-white text-lg">No stock data available.</p>
         )}
       </div>

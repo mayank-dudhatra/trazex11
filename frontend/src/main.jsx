@@ -31,12 +31,14 @@ import MyContest from './components/MyContest/MyContest';
 import ScrennerCard from './components/Screener/ScreenerCard';
 import Wallet from './components/Wallet/Wallet';
 import Leaderboard from './components/Leaderboard/Leaderboard';
+import SocketProvider from './components/common/SocketProvider';
 // import ContestDetails from './components/ContestDetails/ContestDetails';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
   {/* <Navbar /> */}
-    <Routes>
+    <SocketProvider>
+      <Routes>
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Home />} />
@@ -54,10 +56,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/contestdetails/date/:date/exchange/:exchange" element={<Guaranteed />} />
-
-
-
         </Routes>
+    </SocketProvider>
     {/* <Footer /> */}
   </BrowserRouter>
 );

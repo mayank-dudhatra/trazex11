@@ -1,9 +1,11 @@
 
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import Navbar from "../Navbar/Navbar";
 import Footer from "../Footer/Footer";
 import apiClient from "../../services/apiClient";
+import { fetchContestLeaderboard } from "../../services/api";
+import { stockSocket } from "../../services/stockSocket";
 
 // ProgressBar Component
 const ProgressBar = ({ spotsLeft, totalSpots }) => {
@@ -144,6 +146,7 @@ const TeamInfo = ({ onToggle, numTeams }) => {
 
 const MyContest = () => {
   const [joinedContests, setJoinedContests] = useState([]);
+  const [myStats, setMyStats] = useState({});
   const [showMyTeam, setShowMyTeam] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -162,7 +165,8 @@ const MyContest = () => {
     setError(null);
     try {
       const response = await apiClient.get('/contests/user');
-      setJoinedContests(response?.data?.contests || []);
+      const contests = response?.data?.contests || [];
+      setJoinedContests(contests);
     } catch (error) {
       console.error("Error fetching joined contests:", error.response?.data || error.message);
       setError(error?.response?.data?.message || error.message || "Failed to fetch contests");
@@ -170,6 +174,61 @@ const MyContest = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!joinedContests.length || !userId) return;
+
+    const loadMyStats = async () => {
+      const statsEntries = await Promise.all(
+        joinedContests.map(async (contest) => {
+          try {
+            const response = await fetchContestLeaderboard(contest._id);
+            const entries = response?.data || [];
+            const mine = entries.find((entry) => entry.userId?._id?.toString() === userId);
+            if (!mine) return [contest._id, null];
+            return [contest._id, {
+              rank: mine.rank,
+              points: mine.points,
+              winningAmount: mine.winningAmount
+            }];
+          } catch (leaderboardError) {
+            return [contest._id, null];
+          }
+        })
+      );
+
+      const next = statsEntries.reduce((acc, [contestId, stats]) => {
+        if (stats) acc[contestId] = stats;
+        return acc;
+      }, {});
+
+      setMyStats(next);
+    };
+
+    loadMyStats();
+  }, [joinedContests, userId]);
+
+  useEffect(() => {
+    const handleLeaderboardUpdate = (payload) => {
+      if (!payload?.contestId || !payload?.userId) return;
+      if (payload.userId.toString() !== userId) return;
+      setMyStats((prev) => ({
+        ...prev,
+        [payload.contestId]: {
+          rank: payload.rank ?? prev[payload.contestId]?.rank,
+          points: payload.points ?? prev[payload.contestId]?.points,
+          winningAmount: payload.winningAmount ?? prev[payload.contestId]?.winningAmount
+        }
+      }));
+    };
+
+    stockSocket.onLeaderboardUpdate(handleLeaderboardUpdate);
+    return () => {
+      stockSocket.offLeaderboardUpdate(handleLeaderboardUpdate);
+    };
+  }, [userId]);
+
+  const contestStats = useMemo(() => myStats, [myStats]);
 
   const handleToggle = (contestId) => {
     setShowMyTeam((prev) => (prev === contestId ? null : contestId));
@@ -199,6 +258,7 @@ const MyContest = () => {
               const totalWinners = contest.prizeBreakup?.reduce((sum, range) => sum + Number(range.winners || 0), 0) || 0;
               const winPercentage = totalSpots > 0 ? Math.round((totalWinners / totalSpots) * 100) : 0;
               const numTeams = contest.userTeamsCount || 0;
+              const myEntry = contestStats[contest._id];
               return (
                 <article
                   key={contest._id}
@@ -218,6 +278,14 @@ const MyContest = () => {
                     maximumTeam={contest.maximumTeamPerUser}
                     winPercentage={winPercentage}
                   />
+                  <div className="mt-4 flex flex-wrap items-center gap-4 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/80">
+                    <span className="rounded-full bg-white/10 px-3 py-1">Status: {contest.status || 'Upcoming'}</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1">My Rank: {myEntry?.rank ?? '—'}</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1">My Points: {myEntry?.points?.toFixed?.(2) ?? '—'}</span>
+                    <span className="rounded-full bg-white/10 px-3 py-1">
+                      Winnings: {myEntry?.winningAmount ? `₹${myEntry.winningAmount}` : '—'}
+                    </span>
+                  </div>
                   <TeamInfo onToggle={() => handleToggle(contest._id)} numTeams={numTeams} />
                   {showMyTeam === contest._id && <MyTeam contestId={contest._id} />}
                 </article>
