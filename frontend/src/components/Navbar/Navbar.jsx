@@ -15,6 +15,7 @@ function Navbar() {
     } catch (error) {
       console.error('Logout failed:', error?.response?.data || error.message);
     } finally {
+      localStorage.removeItem('token');
       localStorage.removeItem('userId');
       localStorage.removeItem('userRole');
       localStorage.removeItem('contestId');

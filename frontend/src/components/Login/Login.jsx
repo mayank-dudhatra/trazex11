@@ -24,8 +24,12 @@ function Login() {
     setSubmitting(true);
     try {
       const response = await apiClient.post('/auth/login', formData);
+      const token = response?.data?.token || response?.data?.data?.token || '';
       const userId = response?.data?.user?.id || response?.data?.user?._id || '';
       const userRole = response?.data?.user?.role || '';
+      if (token) {
+        localStorage.setItem('token', token);
+      }
       if (userRole) {
         localStorage.setItem('userRole', userRole);
       }
@@ -35,6 +39,7 @@ function Login() {
         } catch (logoutError) {
           console.error('Logout failed:', logoutError?.response?.data || logoutError.message);
         }
+        localStorage.removeItem('token');
         localStorage.removeItem('userRole');
         localStorage.removeItem('userId');
         setError('Please login with a user account to join contests.');
